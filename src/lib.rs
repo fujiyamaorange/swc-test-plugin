@@ -1,13 +1,56 @@
 use swc_core::ecma::{
-    ast::Program,
+    ast::{FnDecl, Ident, JSXAttrName, Program},
     transforms::testing::test,
     visit::{as_folder, FoldWith, VisitMut},
 };
 use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
 
 pub struct TransformVisitor;
+use swc_core::ecma::ast::Callee;
+use swc_core::ecma::ast::Expr;
+use swc_core::ecma::visit::VisitMutWith;
+
+// Test
+use swc_ecma_parser::{Syntax, TsConfig};
 
 impl VisitMut for TransformVisitor {
+    // 関数呼び出し名を変更する
+    fn visit_mut_callee(&mut self, callee: &mut Callee) {
+        callee.visit_mut_children_with(self);
+
+        if let Callee::Expr(expr) = callee {
+            if let Expr::Ident(i) = &mut **expr {
+                if &*i.sym == "onePiece" {
+                    let replace_name: &str = "twoPiece";
+                    i.sym = replace_name.into();
+                }
+            }
+        }
+    }
+
+    // 関数定義名を変更する
+    fn visit_mut_fn_decl(&mut self, n: &mut FnDecl) {
+        n.visit_mut_children_with(self);
+
+        // struct
+        let Ident { sym, .. } = &mut n.ident;
+        {
+            if &*sym == "before" {
+                let replace_name: &str = "after";
+                *sym = replace_name.into();
+            }
+        }
+    }
+
+    // JSXの属性名を変更する
+    fn visit_mut_jsx_attr_name(&mut self, n: &mut JSXAttrName) {
+        if let JSXAttrName::Ident(i) = n {
+            if &*i.sym == "normal" {
+                let replace_name: &str = "special";
+                i.sym = replace_name.into();
+            }
+        }
+    }
     // Implement necessary visit_mut_* methods for actual custom transform.
     // A comprehensive list of possible visitor methods can be found here:
     // https://rustdoc.swc.rs/swc_ecma_visit/trait.VisitMut.html
@@ -33,16 +76,64 @@ pub fn process_transform(program: Program, _metadata: TransformPluginProgramMeta
     program.fold_with(&mut as_folder(TransformVisitor))
 }
 
-// An example to test plugin transform.
-// Recommended strategy to test plugin's transform is verify
-// the Visitor's behavior, instead of trying to run `process_transform` with mocks
-// unless explicitly required to do so.
 test!(
     Default::default(),
     |_| as_folder(TransformVisitor),
-    boo,
+    replace_fetch,
     // Input codes
-    r#"console.log("transform");"#,
+    r#"
+    const res = await onePiece('http://localhost:9999');
+    "#,
     // Output codes after transformed with plugin
-    r#"console.log("transform");"#
+    r#"
+    const res = await twoPiece('http://localhost:9999');
+    "#
+);
+
+test!(
+    Default::default(),
+    |_| as_folder(TransformVisitor),
+    replace_fn_name,
+    // Input codes
+    r#"
+    function before(number) {
+        return number * number;
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    function after(number) {
+        return number * number;
+    }
+    "#
+);
+
+// https://github.com/swc-project/swc/blob/main/crates/swc/tests/simple.rs
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    // Syntax::Typescript(Default::default()),
+    // Default::default(),
+    |_| as_folder(TransformVisitor),
+    replace_jsx_attr_name,
+    // Input codes
+    r#"
+    function Component() {
+        return
+            <div normal="value">
+                <h1>hello</h1>
+            </div>
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    function Component() {
+        return
+            <div special="value">
+                <h1>hello</h1>
+            </div>
+    }
+    "#
 );
