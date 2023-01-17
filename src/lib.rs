@@ -1,17 +1,20 @@
-use swc_core::ecma::{
-    ast::{FnDecl, Ident, JSXAttrName, Program},
-    transforms::testing::test,
-    visit::{as_folder, FoldWith, VisitMut},
-};
 use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
+use swc_core::{
+    common::DUMMY_SP,
+    ecma::{
+        ast::{FnDecl, Ident, JSXAttrValue, Lit, Program},
+        transforms::testing::test,
+        visit::{as_folder, FoldWith, VisitMut},
+    },
+};
 
 pub struct TransformVisitor;
-use swc_core::ecma::ast::Callee;
-use swc_core::ecma::ast::Expr;
+use string_cache::Atom;
+use swc_core::ecma::ast::{Callee, Expr, JSXAttr, JSXAttrName};
 use swc_core::ecma::visit::VisitMutWith;
 
 // Test
-use swc_ecma_parser::{Syntax, TsConfig};
+use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
 
 impl VisitMut for TransformVisitor {
     // 関数呼び出し名を変更する
@@ -42,15 +45,44 @@ impl VisitMut for TransformVisitor {
         }
     }
 
-    // JSXの属性名を変更する
-    fn visit_mut_jsx_attr_name(&mut self, n: &mut JSXAttrName) {
-        if let JSXAttrName::Ident(i) = n {
-            if &*i.sym == "normal" {
-                let replace_name: &str = "special";
-                i.sym = replace_name.into();
+    // JSXの属性名・値を変更する
+    fn visit_mut_jsx_attr(&mut self, n: &mut JSXAttr) {
+        if let JSXAttrName::Ident(name) = &mut n.name {
+            if let Some(JSXAttrValue::Lit(value)) = &mut n.value {
+                if let Lit::Str(s) = value {
+                    if &*name.sym == "src" {
+                        if &*s.value == "before.png" {
+                            s.span = DUMMY_SP;
+                            s.value = Atom::from("after.png");
+                            s.raw = Some("\"after.png\"".into());
+                        }
+                    }
+
+                    if &*name.sym == "normal" {
+                        let replace_name: &str = "special";
+                        name.sym = replace_name.into();
+
+                        s.span = DUMMY_SP;
+                        s.value = Atom::from("special_value");
+                        s.raw = Some("\"special_value\"".into());
+                    }
+
+                    if &*name.sym == "lazy-load" {
+                        if &*s.value == "false" {
+                            s.span = DUMMY_SP;
+                            s.value = Atom::from("true");
+                            s.raw = Some("\"true\"".into());
+                        }
+                    }
+                }
             }
+            // ===JSXAttr===
+            // JSXExprContainer
+            // JSXElement
+            // JSXFragment
         }
     }
+
     // Implement necessary visit_mut_* methods for actual custom transform.
     // A comprehensive list of possible visitor methods can be found here:
     // https://rustdoc.swc.rs/swc_ecma_visit/trait.VisitMut.html
@@ -114,10 +146,8 @@ test!(
         tsx: true,
         ..Default::default()
     }),
-    // Syntax::Typescript(Default::default()),
-    // Default::default(),
     |_| as_folder(TransformVisitor),
-    replace_jsx_attr_name,
+    replace_jsx_attr_name_value,
     // Input codes
     r#"
     function Component() {
@@ -131,9 +161,59 @@ test!(
     r#"
     function Component() {
         return
-            <div special="value">
+            <div special="special_value">
                 <h1>hello</h1>
             </div>
+    }
+    "#
+);
+
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor),
+    replace_jsx_attr_value,
+    // Input codes
+    r#"
+    function Component() {
+        return
+            <img src="before.png" />
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    function Component() {
+        return
+            <img src="after.png" />
+    }
+    "#
+);
+
+test!(
+    // Syntax::Es(EsConfig {
+    //     jsx: true,
+    //     ..Default::default()
+    // }),
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor),
+    replace_jsx_attr_value_bool,
+    // Input codes
+    r#"
+    function Component() {
+        return
+            <img src="sample.png" lazy-load="false" />
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    function Component() {
+        return
+            <img src="sample.png" lazy-load="true" />
     }
     "#
 );
