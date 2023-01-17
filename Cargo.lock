@@ -1263,6 +1263,7 @@ name = "swc-test-plugin"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "string_cache",
  "swc_core",
  "swc_ecma_ast 0.96.1",
  "swc_ecma_parser",
