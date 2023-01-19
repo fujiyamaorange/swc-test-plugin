@@ -11,8 +11,8 @@ use swc_core::{
 pub struct TransformVisitor;
 use string_cache::Atom;
 use swc_core::ecma::ast::{
-    Callee, Expr, JSXAttrName, JSXAttrOrSpread, JSXClosingElement, JSXElementName,
-    JSXOpeningElement,
+    Callee, Expr, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXClosingElement, JSXElementName,
+    JSXOpeningElement, Str,
 };
 use swc_core::ecma::visit::VisitMutWith;
 
@@ -60,7 +60,34 @@ impl VisitMut for TransformVisitor {
             }
         }
 
-        // TODO: attrsに特定の要素がなければ追加する
+        // attrsに特定の要素がなければ追加する
+        let upcoming_attr_name = "data-testid";
+        let mut has_attr = false;
+        for attr_or_spread in attrs.iter_mut() {
+            if let JSXAttrOrSpread::JSXAttr(attr) = attr_or_spread {
+                if let JSXAttrName::Ident(name) = &mut attr.name {
+                    if &*name.sym == upcoming_attr_name {
+                        has_attr = true;
+                    }
+                }
+            }
+        }
+        if !has_attr {
+            // 属性を追加する
+            attrs.push(JSXAttrOrSpread::JSXAttr(JSXAttr {
+                span: DUMMY_SP,
+                name: JSXAttrName::Ident(Ident {
+                    span: DUMMY_SP,
+                    sym: upcoming_attr_name.into(),
+                    optional: false,
+                }),
+                value: Some(JSXAttrValue::Lit(Lit::Str(Str {
+                    span: DUMMY_SP,
+                    value: Atom::from("sample-data-testid"),
+                    raw: Some("\"sample-data-testid\"".into()),
+                }))),
+            }));
+        }
 
         for attr_or_spread in attrs.iter_mut() {
             if let JSXAttrOrSpread::JSXAttr(attr) = attr_or_spread {
@@ -197,11 +224,12 @@ test!(
     }
     "#,
     // Output codes after transformed with plugin
+    // まだ子要素にも属性が追加される
     r#"
     function Component() {
         return
-            <div special="special_value">
-                <h2>hello</h2>
+            <div special="special_value" data-testid="sample-data-testid">
+                <h2 data-testid="sample-data-testid">hello</h2>
             </div>
     }
     "#
@@ -225,7 +253,7 @@ test!(
     r#"
     function Component() {
         return
-            <img src="after.png" />
+            <img src="after.png" data-testid="sample-data-testid" />
     }
     "#
 );
@@ -248,7 +276,7 @@ test!(
     r#"
     function Component() {
         return
-            <img src="sample.png" lazy-load="true" />
+            <img src="sample.png" lazy-load="true" data-testid="sample-data-testid" />
     }
     "#
 );
@@ -273,7 +301,7 @@ test!(
     r#"
     function Text() {
         return
-            <h2>
+            <h2 data-testid="sample-data-testid">
                 This is Text Element!
             </h2>
     }
