@@ -192,10 +192,6 @@ test!(
 );
 
 test!(
-    // Syntax::Es(EsConfig {
-    //     jsx: true,
-    //     ..Default::default()
-    // }),
     Syntax::Typescript(TsConfig {
         tsx: true,
         ..Default::default()
