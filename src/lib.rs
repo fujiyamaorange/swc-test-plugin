@@ -307,3 +307,30 @@ test!(
     }
     "#
 );
+
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor),
+    not_insert_jsx_attr,
+    // Input codes
+    r#"
+    function Text() {
+        return
+            <h3 data-testid="already-data-testid">
+                This is Text Element!
+            </h3>
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    function Text() {
+        return
+            <h3 data-testid="already-data-testid">
+                This is Text Element!
+            </h3>
+    }
+    "#
+);
