@@ -10,11 +10,14 @@ use swc_core::{
 
 pub struct TransformVisitor;
 use string_cache::Atom;
-use swc_core::ecma::ast::{Callee, Expr, JSXAttr, JSXAttrName};
+use swc_core::ecma::ast::{
+    Callee, Expr, JSXAttrName, JSXAttrOrSpread, JSXClosingElement, JSXElementName,
+    JSXOpeningElement,
+};
 use swc_core::ecma::visit::VisitMutWith;
 
 // Test
-use swc_ecma_parser::{EsConfig, Syntax, TsConfig};
+use swc_ecma_parser::{Syntax, TsConfig};
 
 impl VisitMut for TransformVisitor {
     // 関数呼び出し名を変更する
@@ -45,43 +48,79 @@ impl VisitMut for TransformVisitor {
         }
     }
 
-    // JSXの属性名・値を変更する
-    fn visit_mut_jsx_attr(&mut self, n: &mut JSXAttr) {
-        if let JSXAttrName::Ident(name) = &mut n.name {
-            if let Some(JSXAttrValue::Lit(value)) = &mut n.value {
-                if let Lit::Str(s) = value {
-                    if &*name.sym == "src" {
-                        if &*s.value == "before.png" {
-                            s.span = DUMMY_SP;
-                            s.value = Atom::from("after.png");
-                            s.raw = Some("\"after.png\"".into());
+    // JSXのopening_elementを取得する
+    fn visit_mut_jsx_opening_element(&mut self, n: &mut JSXOpeningElement) {
+        let element_name = &mut n.name;
+        let attrs = &mut n.attrs;
+
+        if let JSXElementName::Ident(ident) = element_name {
+            if &*ident.sym == "h1" {
+                // h2に変更する
+                ident.sym = "h2".into();
+            }
+        }
+
+        // TODO: attrsに特定の要素がなければ追加する
+
+        for attr_or_spread in attrs.iter_mut() {
+            if let JSXAttrOrSpread::JSXAttr(attr) = attr_or_spread {
+                // visit_mut_jsx_attr(JSXの属性名・値を変更する)と同じ
+                if let JSXAttrName::Ident(name) = &mut attr.name {
+                    if let Some(JSXAttrValue::Lit(value)) = &mut attr.value {
+                        if let Lit::Str(s) = value {
+                            if &*name.sym == "src" {
+                                if &*s.value == "before.png" {
+                                    s.span = DUMMY_SP;
+                                    s.value = Atom::from("after.png");
+                                    s.raw = Some("\"after.png\"".into());
+                                }
+                            }
+
+                            if &*name.sym == "normal" {
+                                let replace_name: &str = "special";
+                                name.sym = replace_name.into();
+
+                                s.span = DUMMY_SP;
+                                s.value = Atom::from("special_value");
+                                s.raw = Some("\"special_value\"".into());
+                            }
+
+                            if &*name.sym == "lazy-load" {
+                                if &*s.value == "false" {
+                                    s.span = DUMMY_SP;
+                                    s.value = Atom::from("true");
+                                    s.raw = Some("\"true\"".into());
+                                }
+                            }
                         }
                     }
-
-                    if &*name.sym == "normal" {
-                        let replace_name: &str = "special";
-                        name.sym = replace_name.into();
-
-                        s.span = DUMMY_SP;
-                        s.value = Atom::from("special_value");
-                        s.raw = Some("\"special_value\"".into());
-                    }
-
-                    if &*name.sym == "lazy-load" {
-                        if &*s.value == "false" {
-                            s.span = DUMMY_SP;
-                            s.value = Atom::from("true");
-                            s.raw = Some("\"true\"".into());
-                        }
-                    }
+                    // ===JSXAttr===
+                    // JSXExprContainer
+                    // JSXElement
+                    // JSXFragment
                 }
             }
-            // ===JSXAttr===
-            // JSXExprContainer
-            // JSXElement
-            // JSXFragment
         }
     }
+
+    // JSXのclosing_elementを取得する
+    fn visit_mut_jsx_closing_element(&mut self, n: &mut JSXClosingElement) {
+        let element_name = &mut n.name;
+
+        if let JSXElementName::Ident(ident) = element_name {
+            if &*ident.sym == "h1" {
+                // h2に変更する
+                ident.sym = "h2".into();
+            }
+        }
+    }
+
+    // fn visit_mut_jsx_element_children(&mut self, n: &mut Vec<JSXElementChild>) {
+    //     // コンポーネントに子がいる場合
+    //     if n.len() > 0 {
+    //         panic!("===visit_mut_jsx_element_children==={:?}", n);
+    //     }
+    // }
 
     // Implement necessary visit_mut_* methods for actual custom transform.
     // A comprehensive list of possible visitor methods can be found here:
@@ -125,7 +164,7 @@ test!(
 test!(
     Default::default(),
     |_| as_folder(TransformVisitor),
-    replace_fn_name,
+    replace_function_name,
     // Input codes
     r#"
     function before(number) {
@@ -147,7 +186,7 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor),
-    replace_jsx_attr_name_value,
+    replace_jsx_attr_name_and_value,
     // Input codes
     r#"
     function Component() {
@@ -162,7 +201,7 @@ test!(
     function Component() {
         return
             <div special="special_value">
-                <h1>hello</h1>
+                <h2>hello</h2>
             </div>
     }
     "#
@@ -197,7 +236,7 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor),
-    replace_jsx_attr_value_bool,
+    replace_jsx_attr_bool,
     // Input codes
     r#"
     function Component() {
@@ -210,6 +249,33 @@ test!(
     function Component() {
         return
             <img src="sample.png" lazy-load="true" />
+    }
+    "#
+);
+
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor),
+    replace_jsx_element_name,
+    // Input codes
+    r#"
+    function Text() {
+        return
+            <h1>
+                This is Text Element!
+            </h1>
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    function Text() {
+        return
+            <h2>
+                This is Text Element!
+            </h2>
     }
     "#
 );
