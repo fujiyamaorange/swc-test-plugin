@@ -20,7 +20,7 @@ use swc_core::ecma::ast::{
 };
 use swc_core::ecma::visit::VisitMutWith;
 
-// Test
+// Crates for Test
 use swc_ecma_parser::{Syntax, TsConfig};
 
 impl TransformVisitor {
@@ -42,7 +42,7 @@ impl TransformVisitor {
 }
 
 impl VisitMut for TransformVisitor {
-    // 関数呼び出し名を変更する
+    // update a name of function callee
     fn visit_mut_callee(&mut self, callee: &mut Callee) {
         callee.visit_mut_children_with(self);
 
@@ -56,7 +56,7 @@ impl VisitMut for TransformVisitor {
         }
     }
 
-    // 関数定義名を変更する
+    // update a name of function declaration
     fn visit_mut_fn_decl(&mut self, n: &mut FnDecl) {
         // struct
         let Ident { sym, .. } = &mut n.ident;
@@ -69,13 +69,13 @@ impl VisitMut for TransformVisitor {
         if !self.is_in_child {
             self.component_name = n.ident.clone();
         }
-        // component_name追加後に走査
+        // check after updating self.component_name
         n.visit_mut_children_with(self);
     }
 
-    // JSXのopening_elementを取得する
+    // visit jsx opening_element
     fn visit_mut_jsx_opening_element(&mut self, n: &mut JSXOpeningElement) {
-        // TODO: self-closingのコンポーネントの調査・対応
+        // TODO: support for sef-closing component
         if self.is_in_child {
             return;
         }
@@ -83,7 +83,7 @@ impl VisitMut for TransformVisitor {
         let element_name = &mut n.name;
         let attrs = &mut n.attrs;
 
-        // attrsに特定の要素がなければ追加する
+        // add "data-testid" if there is no "data-testid" attribute.
         let upcoming_attr_name = "data-testid";
         let mut has_attr = false;
         for attr_or_spread in attrs.iter_mut() {
@@ -96,7 +96,7 @@ impl VisitMut for TransformVisitor {
             }
         }
         if !has_attr {
-            // 属性を追加する
+            // add attribute
             attrs.push(JSXAttrOrSpread::JSXAttr(JSXAttr {
                 span: DUMMY_SP,
                 name: JSXAttrName::Ident(Ident {
@@ -117,7 +117,7 @@ impl VisitMut for TransformVisitor {
 
         for attr_or_spread in attrs.iter_mut() {
             if let JSXAttrOrSpread::JSXAttr(attr) = attr_or_spread {
-                // visit_mut_jsx_attr(JSXの属性名・値を変更する)と同じ
+                // almost same as visit_mut_jsx_attr(update name or value of jsx attribute) function
                 if let JSXAttrName::Ident(name) = &mut attr.name {
                     if let Some(JSXAttrValue::Lit(value)) = &mut attr.value {
                         if let Lit::Str(s) = value {
@@ -155,31 +155,31 @@ impl VisitMut for TransformVisitor {
             }
         }
 
-        // 親だけ解析する
-        // WARNING: self closing 未対応
+        // check top level of component
+        // TODO: support for sef-closing component
         self.is_in_child = true;
         self.parent_name = element_name.clone();
     }
 
-    // JSXのclosing_elementを取得する
+    // visit jsx closing_element
     fn visit_mut_jsx_closing_element(&mut self, n: &mut JSXClosingElement) {
         let element_name = &mut n.name;
 
         // if let JSXElementName::Ident(ident) = element_name {
         //     if &*ident.sym == "h1" {
-        //         // h2に変更する
+        //         // convert to h2 element
         //         ident.sym = "h2".into();
         //     }
         // }
 
-        // 親のclosingを見つける
+        // find parent closing_element
         if *element_name == self.parent_name {
             self.is_in_child = false;
         }
     }
 
     // fn visit_mut_jsx_element_children(&mut self, n: &mut Vec<JSXElementChild>) {
-    //     // コンポーネントに子がいる場合
+    //     // in case component has children
     //     if n.len() > 0 {
     //         panic!("===visit_mut_jsx_element_children==={:?}", n);
     //     }
@@ -260,7 +260,6 @@ test!(
     }
     "#,
     // Output codes after transformed with plugin
-    // まだ子要素にも属性が追加される
     r#"
     function TextComponent() {
         return
