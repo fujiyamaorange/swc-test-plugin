@@ -8,7 +8,11 @@ use swc_core::{
     },
 };
 
-pub struct TransformVisitor;
+pub struct TransformVisitor {
+    is_in_child: bool,
+    parent_name: JSXElementName,
+    component_name: Ident,
+}
 use string_cache::Atom;
 use swc_core::ecma::ast::{
     Callee, Expr, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXClosingElement, JSXElementName,
@@ -18,6 +22,24 @@ use swc_core::ecma::visit::VisitMutWith;
 
 // Test
 use swc_ecma_parser::{Syntax, TsConfig};
+
+impl TransformVisitor {
+    fn new() -> Self {
+        Self {
+            is_in_child: false,
+            parent_name: JSXElementName::Ident(Ident {
+                span: DUMMY_SP,
+                sym: "".into(),
+                optional: false,
+            }),
+            component_name: Ident {
+                span: DUMMY_SP,
+                sym: "".into(),
+                optional: false,
+            },
+        }
+    }
+}
 
 impl VisitMut for TransformVisitor {
     // 関数呼び出し名を変更する
@@ -36,8 +58,6 @@ impl VisitMut for TransformVisitor {
 
     // 関数定義名を変更する
     fn visit_mut_fn_decl(&mut self, n: &mut FnDecl) {
-        n.visit_mut_children_with(self);
-
         // struct
         let Ident { sym, .. } = &mut n.ident;
         {
@@ -46,19 +66,22 @@ impl VisitMut for TransformVisitor {
                 *sym = replace_name.into();
             }
         }
+        if !self.is_in_child {
+            self.component_name = n.ident.clone();
+        }
+        // component_name追加後に走査
+        n.visit_mut_children_with(self);
     }
 
     // JSXのopening_elementを取得する
     fn visit_mut_jsx_opening_element(&mut self, n: &mut JSXOpeningElement) {
+        // TODO: self-closingのコンポーネントの調査・対応
+        if self.is_in_child {
+            return;
+        }
+
         let element_name = &mut n.name;
         let attrs = &mut n.attrs;
-
-        if let JSXElementName::Ident(ident) = element_name {
-            if &*ident.sym == "h1" {
-                // h2に変更する
-                ident.sym = "h2".into();
-            }
-        }
 
         // attrsに特定の要素がなければ追加する
         let upcoming_attr_name = "data-testid";
@@ -83,8 +106,11 @@ impl VisitMut for TransformVisitor {
                 }),
                 value: Some(JSXAttrValue::Lit(Lit::Str(Str {
                     span: DUMMY_SP,
-                    value: Atom::from("sample-data-testid"),
-                    raw: Some("\"sample-data-testid\"".into()),
+                    value: Atom::from(self.component_name.sym.clone()),
+                    // TODO: Convert to kebab-case
+                    raw: Some(
+                        format!("\"{}\"", self.component_name.sym.clone().to_lowercase()).into(),
+                    ),
                 }))),
             }));
         }
@@ -128,17 +154,27 @@ impl VisitMut for TransformVisitor {
                 }
             }
         }
+
+        // 親だけ解析する
+        // WARNING: self closing 未対応
+        self.is_in_child = true;
+        self.parent_name = element_name.clone();
     }
 
     // JSXのclosing_elementを取得する
     fn visit_mut_jsx_closing_element(&mut self, n: &mut JSXClosingElement) {
         let element_name = &mut n.name;
 
-        if let JSXElementName::Ident(ident) = element_name {
-            if &*ident.sym == "h1" {
-                // h2に変更する
-                ident.sym = "h2".into();
-            }
+        // if let JSXElementName::Ident(ident) = element_name {
+        //     if &*ident.sym == "h1" {
+        //         // h2に変更する
+        //         ident.sym = "h2".into();
+        //     }
+        // }
+
+        // 親のclosingを見つける
+        if *element_name == self.parent_name {
+            self.is_in_child = false;
         }
     }
 
@@ -171,12 +207,12 @@ impl VisitMut for TransformVisitor {
 /// Refer swc_plugin_macro to see how does it work internally.
 #[plugin_transform]
 pub fn process_transform(program: Program, _metadata: TransformPluginProgramMetadata) -> Program {
-    program.fold_with(&mut as_folder(TransformVisitor))
+    program.fold_with(&mut as_folder(TransformVisitor::new()))
 }
 
 test!(
     Default::default(),
-    |_| as_folder(TransformVisitor),
+    |_| as_folder(TransformVisitor::new()),
     replace_fetch,
     // Input codes
     r#"
@@ -190,7 +226,7 @@ test!(
 
 test!(
     Default::default(),
-    |_| as_folder(TransformVisitor),
+    |_| as_folder(TransformVisitor::new()),
     replace_function_name,
     // Input codes
     r#"
@@ -212,11 +248,11 @@ test!(
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor),
+    |_| as_folder(TransformVisitor::new()),
     replace_jsx_attr_name_and_value,
     // Input codes
     r#"
-    function Component() {
+    function TextComponent() {
         return
             <div normal="value">
                 <h1>hello</h1>
@@ -226,10 +262,10 @@ test!(
     // Output codes after transformed with plugin
     // まだ子要素にも属性が追加される
     r#"
-    function Component() {
+    function TextComponent() {
         return
-            <div special="special_value" data-testid="sample-data-testid">
-                <h2 data-testid="sample-data-testid">hello</h2>
+            <div special="special_value" data-testid="textcomponent">
+                <h1>hello</h1>
             </div>
     }
     "#
@@ -240,7 +276,7 @@ test!(
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor),
+    |_| as_folder(TransformVisitor::new()),
     replace_jsx_attr_value,
     // Input codes
     r#"
@@ -253,7 +289,7 @@ test!(
     r#"
     function Component() {
         return
-            <img src="after.png" data-testid="sample-data-testid" />
+            <img src="after.png" data-testid="component" />
     }
     "#
 );
@@ -263,20 +299,20 @@ test!(
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor),
+    |_| as_folder(TransformVisitor::new()),
     replace_jsx_attr_bool,
     // Input codes
     r#"
-    function Component() {
+    function ImgComponent() {
         return
             <img src="sample.png" lazy-load="false" />
     }
     "#,
     // Output codes after transformed with plugin
     r#"
-    function Component() {
+    function ImgComponent() {
         return
-            <img src="sample.png" lazy-load="true" data-testid="sample-data-testid" />
+            <img src="sample.png" lazy-load="true" data-testid="imgcomponent" />
     }
     "#
 );
@@ -286,7 +322,7 @@ test!(
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor),
+    |_| as_folder(TransformVisitor::new()),
     replace_jsx_element_name,
     // Input codes
     r#"
@@ -301,9 +337,9 @@ test!(
     r#"
     function Text() {
         return
-            <h2 data-testid="sample-data-testid">
+            <h1 data-testid="text">
                 This is Text Element!
-            </h2>
+            </h1>
     }
     "#
 );
@@ -313,7 +349,7 @@ test!(
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor),
+    |_| as_folder(TransformVisitor::new()),
     not_insert_jsx_attr,
     // Input codes
     r#"
@@ -331,6 +367,37 @@ test!(
             <h3 data-testid="already-data-testid">
                 This is Text Element!
             </h3>
+    }
+    "#
+);
+
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor::new()),
+    add_jsx_attr_only_parent,
+    // Input codes
+    r#"
+    function Component() {
+        return
+            <div>
+                <div>
+                    <h3>This is nested text!</h3>
+                </div>
+            </div>
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    function Component() {
+        return
+            <div data-testid="component">
+                <div>
+                    <h3>This is nested text!</h3>
+                </div>
+            </div>
     }
     "#
 );
