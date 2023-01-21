@@ -3,8 +3,9 @@ use swc_core::{
     common::DUMMY_SP,
     ecma::{
         ast::{FnDecl, Ident, JSXAttrValue, Lit, Program},
+        atoms::JsWordStaticSet,
         transforms::testing::test,
-        visit::{as_folder, FoldWith, VisitMut},
+        visit::{as_folder, FoldWith, VisitMut, VisitMutWith},
     },
 };
 
@@ -13,15 +14,19 @@ pub struct TransformVisitor {
     parent_name: JSXElementName,
     component_name: Ident,
 }
+use convert_case::{Case, Casing};
 use string_cache::Atom;
 use swc_core::ecma::ast::{
     Callee, Expr, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXClosingElement, JSXElementName,
     JSXOpeningElement, Str,
 };
-use swc_core::ecma::visit::VisitMutWith;
 
 // Crates for Test
 use swc_ecma_parser::{Syntax, TsConfig};
+
+fn convert_to_kebab_case(s: Atom<JsWordStaticSet>) -> String {
+    return s.clone().to_string().to_case(Case::Kebab);
+}
 
 impl TransformVisitor {
     fn new() -> Self {
@@ -107,10 +112,14 @@ impl VisitMut for TransformVisitor {
                 value: Some(JSXAttrValue::Lit(Lit::Str(Str {
                     span: DUMMY_SP,
                     value: Atom::from(self.component_name.sym.clone()),
-                    // TODO: Convert to kebab-case
                     raw: Some(
-                        format!("\"{}\"", self.component_name.sym.clone().to_lowercase()).into(),
+                        format!(
+                            "\"{}\"",
+                            convert_to_kebab_case(self.component_name.sym.clone()).to_lowercase()
+                        )
+                        .into(),
                     ),
+                    // convert_to_kebab_case
                 }))),
             }));
         }
@@ -263,7 +272,7 @@ test!(
     r#"
     function TextComponent() {
         return
-            <div special="special_value" data-testid="textcomponent">
+            <div special="special_value" data-testid="text-component">
                 <h1>hello</h1>
             </div>
     }
@@ -311,7 +320,7 @@ test!(
     r#"
     function ImgComponent() {
         return
-            <img src="sample.png" lazy-load="true" data-testid="imgcomponent" />
+            <img src="sample.png" lazy-load="true" data-testid="img-component" />
     }
     "#
 );
