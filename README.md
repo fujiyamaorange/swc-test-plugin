@@ -10,5 +10,5 @@ https://swc.rs/docs/plugin/ecmascript/getting-started
 
 ## Build package
 ```
-cargo build --release　--target wasm32-wasi
+cargo build --release --target wasm32-wasi
 ```
