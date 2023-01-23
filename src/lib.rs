@@ -556,3 +556,203 @@ test!(
     }
     "#
 );
+
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor::new()),
+    exit_test1_fn_decl,
+    // Input codes
+    r#"
+    function Div() {
+      return <div />
+    }
+
+    function Nested() {
+      return (
+        <div>
+          hello
+          <div>world</div>
+        </div>
+      )
+    }
+
+    function NoReturn () { <div /> }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    function Div() {
+      return <div data-testid="div" />
+    }
+    
+    function Nested() {
+      return <div data-testid="nested">
+          hello
+          <div>world</div>
+        </div>
+    }
+
+    function NoReturn () { <div /> }
+    "#
+);
+
+// test!(
+//     Syntax::Typescript(TsConfig {
+//         tsx: true,
+//         ..Default::default()
+//     }),
+//     |_| as_folder(TransformVisitor::new()),
+//     exit_test2_fn_expr,
+//     // Input codes
+//     r#"
+//     const Div = function() {
+//       return <div />
+//     }
+
+//     const Nested = function() {
+//       return (
+//         <div>
+//           hello
+//           <div>world</div>
+//         </div>
+//       )
+//     }
+
+//     const NoReturn = function() { <div /> }
+
+//     const NoJSXReturn = function() { return 0 }
+//     "#,
+//     // Output codes after transformed with plugin
+//     r#"
+//     const Div = function() {
+//       return <div data-testid="div" />
+//     }
+
+//     const Nested = function() {
+//       return (
+//         <div data-testid="nested">
+//           hello
+//           <div>world</div>
+//         </div>
+//       )
+//     }
+
+//     const NoReturn = function() { <div /> }
+
+//     const NoJSXReturn = function() { return 0 }
+//     "#
+// );
+
+// test!(
+//     Syntax::Typescript(TsConfig {
+//         tsx: true,
+//         ..Default::default()
+//     }),
+//     |_| as_folder(TransformVisitor::new()),
+//     exit_test3_arrow_fn_expr,
+//     // Input codes
+//     r#"
+//     const Div = () => {
+//       return <div />
+//     }
+
+//     const Nested = () => {
+//       return (
+//         <div>
+//           hello
+//           <div>world</div>
+//         </div>
+//       )
+//     }
+
+//     const WithoutReturn = () => (
+//       <div>hello</div>
+//     )
+
+//     const WithoutReturnJSXFragment = () => (
+//       <>
+//         <div />
+//       </>
+//     )
+
+//     const NoReturn = () => { <div /> }
+//     "#,
+//     // Output codes after transformed with plugin
+//     r#"
+//    const Div = () => {
+//       return <div data-testid="div" />
+//     }
+
+//     const Nested = () => {
+//       return <div data-testid="nested">
+//           hello
+//           <div>world</div>
+//         </div>
+//     }
+
+//     const WithoutReturn = () => <div data-testid="without-return">hello</div>;
+
+//     const WithoutReturnJSXFragment = () => <>
+//         <div />
+//       </>;
+
+//     const NoReturn = () => { <div /> }
+//     "#
+// );
+
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor::new()),
+    exit_test4_with_children,
+    // Input codes
+    r#"
+    const Parent = ({ children }) => (
+      <div>{children}</div>
+    )
+
+    const Child = () => (
+      <Parent>
+        <div>
+          child
+        </div>
+      </Parent>
+    )
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    const Parent = ({ children }) => <div data-testid="parent">{children}</div>;
+
+    const Child = () =>
+      <Parent data-testid="child">
+        <div>
+          child
+        </div>
+      </Parent>
+    "#
+);
+
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor::new()),
+    exit_test5_already_has_attr,
+    // Input codes
+    r#"
+    function Div() {
+      return <div data-testid='already-defined' />
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    function Div() {
+      return <div data-testid='already-defined' />
+    }
+    "#
+);
