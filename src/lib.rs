@@ -17,8 +17,8 @@ pub struct TransformVisitor {
 use convert_case::{Case, Casing};
 use string_cache::Atom;
 use swc_core::ecma::ast::{
-    BlockStmtOrExpr, Callee, Expr, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXClosingElement,
-    JSXElementName, JSXOpeningElement, Str, VarDecl,
+    BlockStmt, BlockStmtOrExpr, Callee, Expr, JSXAttr, JSXAttrName, JSXAttrOrSpread,
+    JSXClosingElement, JSXElementName, JSXOpeningElement, Str, VarDecl,
 };
 
 // Crates for Test
@@ -26,6 +26,45 @@ use swc_ecma_parser::{Syntax, TsConfig};
 
 fn convert_to_kebab_case(s: Atom<JsWordStaticSet>) -> String {
     return s.clone().to_string().to_case(Case::Kebab);
+}
+
+fn parser_block_stmt(block_stmt: &mut BlockStmt) -> bool {
+    let mut is_jsx_component = false;
+
+    let stmts = &mut block_stmt.stmts;
+    for stmt in stmts.iter_mut() {
+        // check type of arg
+        if let Stmt::Return(return_stmt) = stmt {
+            if let Some(arg) = &mut return_stmt.arg {
+                match &mut **arg {
+                    // TODO: support for JSX***
+                    // return one JSXElement(self closing) without parenthesis (pattern1)
+                    Expr::JSXElement(_) => is_jsx_component = true,
+                    // return JSXElement with parenthesis (pattern2)
+                    Expr::Paren(paren_expr) => {
+                        let expr = &mut paren_expr.expr;
+                        // TODO: support for JSX***
+                        match &mut **expr {
+                            Expr::JSXElement(_) => is_jsx_component = true,
+                            _ => (),
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        // return JSXElements without parenthesis (pattern3)
+        if let Stmt::Expr(expr_stmt) = stmt {
+            let expr = &mut expr_stmt.expr;
+            match &mut **expr {
+                Expr::JSXElement(_) => is_jsx_component = true,
+                _ => (),
+            }
+        }
+    }
+
+    return is_jsx_component;
 }
 
 impl TransformVisitor {
@@ -79,6 +118,7 @@ impl VisitMut for TransformVisitor {
         n.visit_mut_children_with(self);
     }
 
+    // This function is to get component_name and check variable whether jsx component or not
     fn visit_mut_var_decl(&mut self, n: &mut VarDecl) {
         let decls = &mut n.decls;
         let mut is_jsx_component = false;
@@ -88,38 +128,18 @@ impl VisitMut for TransformVisitor {
                 // https://swc.rs/docs/plugin/ecmascript/cheatsheet#matching-boxt
                 if let Expr::Arrow(arrow_expr) = &mut **init {
                     if let BlockStmtOrExpr::BlockStmt(block_stmt) = &mut arrow_expr.body {
-                        let stmts = &mut block_stmt.stmts;
-                        for stmt in stmts.iter_mut() {
-                            // check type of arg
-                            if let Stmt::Return(return_stmt) = stmt {
-                                if let Some(arg) = &mut return_stmt.arg {
-                                    match &mut **arg {
-                                        // TODO: support for JSX***
-                                        // return one JSXElement(self closing) without parenthesis (pattern1)
-                                        Expr::JSXElement(_) => is_jsx_component = true,
-                                        // return JSXElement with parenthesis (pattern2)
-                                        Expr::Paren(paren_expr) => {
-                                            let expr = &mut paren_expr.expr;
-                                            // TODO: support for JSX***
-                                            match &mut **expr {
-                                                Expr::JSXElement(_) => is_jsx_component = true,
-                                                _ => (),
-                                            }
-                                        }
-                                        _ => (),
-                                    }
-                                }
-                            }
+                        // Same as Functions Expression
+                        let tmp_is_jsx_component = parser_block_stmt(block_stmt);
+                        is_jsx_component = tmp_is_jsx_component;
+                    }
+                }
 
-                            // return JSXElements without parenthesis (pattern3)
-                            if let Stmt::Expr(expr_stmt) = stmt {
-                                let expr = &mut expr_stmt.expr;
-                                match &mut **expr {
-                                    Expr::JSXElement(_) => is_jsx_component = true,
-                                    _ => (),
-                                }
-                            }
-                        }
+                // return fn expr which returns JSXElement
+                if let Expr::Fn(fn_expr) = &mut **init {
+                    if let Some(block_stmt) = &mut fn_expr.function.body {
+                        // Same as Arrow Functions
+                        let tmp_is_jsx_component = parser_block_stmt(block_stmt);
+                        is_jsx_component = tmp_is_jsx_component;
                     }
                 }
             }
@@ -598,52 +618,50 @@ test!(
     "#
 );
 
-// test!(
-//     Syntax::Typescript(TsConfig {
-//         tsx: true,
-//         ..Default::default()
-//     }),
-//     |_| as_folder(TransformVisitor::new()),
-//     exit_test2_fn_expr,
-//     // Input codes
-//     r#"
-//     const Div = function() {
-//       return <div />
-//     }
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor::new()),
+    exit_test2_fn_expr,
+    // Input codes
+    r#"
+    const Div = function() {
+      return <div />
+    }
 
-//     const Nested = function() {
-//       return (
-//         <div>
-//           hello
-//           <div>world</div>
-//         </div>
-//       )
-//     }
+    const Nested = function() {
+      return (
+        <div>
+          hello
+          <div>world</div>
+        </div>
+      )
+    }
 
-//     const NoReturn = function() { <div /> }
+    const NoReturn = function() { <div /> }
 
-//     const NoJSXReturn = function() { return 0 }
-//     "#,
-//     // Output codes after transformed with plugin
-//     r#"
-//     const Div = function() {
-//       return <div data-testid="div" />
-//     }
+    const NoJSXReturn = function() { return 0 }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    const Div = function() {
+      return <div data-testid="div" />
+    }
 
-//     const Nested = function() {
-//       return (
-//         <div data-testid="nested">
-//           hello
-//           <div>world</div>
-//         </div>
-//       )
-//     }
+    const Nested = function() {
+      return <div data-testid="nested">
+          hello
+          <div>world</div>
+        </div>
+    }
 
-//     const NoReturn = function() { <div /> }
+    const NoReturn = function() { <div /> }
 
-//     const NoJSXReturn = function() { return 0 }
-//     "#
-// );
+    const NoJSXReturn = function() { return 0 }
+    "#
+);
 
 // test!(
 //     Syntax::Typescript(TsConfig {
@@ -702,39 +720,39 @@ test!(
 //     "#
 // );
 
-test!(
-    Syntax::Typescript(TsConfig {
-        tsx: true,
-        ..Default::default()
-    }),
-    |_| as_folder(TransformVisitor::new()),
-    exit_test4_with_children,
-    // Input codes
-    r#"
-    const Parent = ({ children }) => (
-      <div>{children}</div>
-    )
+// test!(
+//     Syntax::Typescript(TsConfig {
+//         tsx: true,
+//         ..Default::default()
+//     }),
+//     |_| as_folder(TransformVisitor::new()),
+//     exit_test4_with_children,
+//     // Input codes
+//     r#"
+//     const Parent = ({ children }) => (
+//       <div>{children}</div>
+//     )
 
-    const Child = () => (
-      <Parent>
-        <div>
-          child
-        </div>
-      </Parent>
-    )
-    "#,
-    // Output codes after transformed with plugin
-    r#"
-    const Parent = ({ children }) => <div data-testid="parent">{children}</div>;
+//     const Child = () => (
+//       <Parent>
+//         <div>
+//           child
+//         </div>
+//       </Parent>
+//     )
+//     "#,
+//     // Output codes after transformed with plugin
+//     r#"
+//     const Parent = ({ children }) => <div data-testid="parent">{children}</div>;
 
-    const Child = () =>
-      <Parent data-testid="child">
-        <div>
-          child
-        </div>
-      </Parent>
-    "#
-);
+//     const Child = () =>
+//       <Parent data-testid="child">
+//         <div>
+//           child
+//         </div>
+//       </Parent>
+//     "#
+// );
 
 test!(
     Syntax::Typescript(TsConfig {
