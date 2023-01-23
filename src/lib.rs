@@ -2,7 +2,7 @@ use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
-        ast::{FnDecl, Ident, JSXAttrValue, Lit, Program},
+        ast::{FnDecl, Ident, JSXAttrValue, Lit, Pat, Program, Stmt},
         atoms::JsWordStaticSet,
         transforms::testing::test,
         visit::{as_folder, FoldWith, VisitMut, VisitMutWith},
@@ -17,8 +17,8 @@ pub struct TransformVisitor {
 use convert_case::{Case, Casing};
 use string_cache::Atom;
 use swc_core::ecma::ast::{
-    Callee, Expr, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXClosingElement, JSXElementName,
-    JSXOpeningElement, Str,
+    BlockStmtOrExpr, Callee, Expr, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXClosingElement,
+    JSXElementName, JSXOpeningElement, Str, VarDecl,
 };
 
 // Crates for Test
@@ -447,6 +447,109 @@ test!(
                     <h3>This is nested text!</h3>
                 </div>
             </div>
+    }
+    "#
+);
+
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor::new()),
+    replace_jsx_attr_like_practice_with_parenthesis,
+    // Input codes
+    r#"
+    import { UserProfile } from './user';
+    import { User } from './types/user';
+
+    const onClickFn = () => {
+        console.log('Button is clicked!!');
+        return "hello";
+    }
+
+    type Props = {
+        user: User
+    }
+
+    const UserComponent = ({ user }: Props) => {
+        return (
+            <User user={user}>
+                <div>
+                    <button onClick={onClickFn}>This is button!</button>
+                    <h3>This is nested text!</h3>
+                </div>
+            </User>
+        )
+            
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    import { UserProfile } from './user';
+    import { User } from './types/user';
+
+    const onClickFn = () => {
+        console.log('Button is clicked!!');
+        return "hello";
+    }
+
+    type Props = {
+        user: User
+    }
+
+    const UserComponent = ({ user }: Props) => {
+        return  <User user={user} data-testid="user-component">
+                <div>
+                    <button onClick={onClickFn}>This is button!</button>
+                    <h3>This is nested text!</h3>
+                </div>
+            </User>
+    }
+    "#
+);
+
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor::new()),
+    replace_jsx_attr_like_practice_without_parenthesis,
+    // Input codes
+    r#"
+    import { UserProfile } from './user';
+    import { User } from './types/user';
+
+    const onClickFn = () => {
+        console.log('Button is clicked!!');
+        return "hello";
+    }
+
+    type Props = {
+        user: User
+    }
+
+    const UserComponent = ({ user }: Props) => {
+        return <User user={user} />
+    }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    import { UserProfile } from './user';
+    import { User } from './types/user';
+
+    const onClickFn = () => {
+        console.log('Button is clicked!!');
+        return "hello";
+    }
+
+    type Props = {
+        user: User
+    }
+
+    const UserComponent = ({ user }: Props) => {
+        return <User user={user} data-testid="user-component" />
     }
     "#
 );
