@@ -52,6 +52,7 @@ impl VisitMut for TransformVisitor {
         callee.visit_mut_children_with(self);
 
         if let Callee::Expr(expr) = callee {
+            // https://swc.rs/docs/plugin/ecmascript/cheatsheet#matching-boxt
             if let Expr::Ident(i) = &mut **expr {
                 if &*i.sym == "onePiece" {
                     let replace_name: &str = "twoPiece";
@@ -75,6 +76,64 @@ impl VisitMut for TransformVisitor {
             self.component_name = n.ident.clone();
         }
         // check after updating self.component_name
+        n.visit_mut_children_with(self);
+    }
+
+    fn visit_mut_var_decl(&mut self, n: &mut VarDecl) {
+        let decls = &mut n.decls;
+        let mut is_jsx_component = false;
+
+        for decl in decls.iter_mut() {
+            if let Some(init) = &mut decl.init {
+                // https://swc.rs/docs/plugin/ecmascript/cheatsheet#matching-boxt
+                if let Expr::Arrow(arrow_expr) = &mut **init {
+                    if let BlockStmtOrExpr::BlockStmt(block_stmt) = &mut arrow_expr.body {
+                        let stmts = &mut block_stmt.stmts;
+                        for stmt in stmts.iter_mut() {
+                            // check type of arg
+                            if let Stmt::Return(return_stmt) = stmt {
+                                if let Some(arg) = &mut return_stmt.arg {
+                                    match &mut **arg {
+                                        // TODO: support for JSX***
+                                        // return one JSXElement(self closing) without parenthesis (pattern1)
+                                        Expr::JSXElement(_) => is_jsx_component = true,
+                                        // return JSXElement with parenthesis (pattern2)
+                                        Expr::Paren(paren_expr) => {
+                                            let expr = &mut paren_expr.expr;
+                                            // TODO: support for JSX***
+                                            match &mut **expr {
+                                                Expr::JSXElement(_) => is_jsx_component = true,
+                                                _ => (),
+                                            }
+                                        }
+                                        _ => (),
+                                    }
+                                }
+                            }
+
+                            // return JSXElements without parenthesis (pattern3)
+                            if let Stmt::Expr(expr_stmt) = stmt {
+                                let expr = &mut expr_stmt.expr;
+                                match &mut **expr {
+                                    Expr::JSXElement(_) => is_jsx_component = true,
+                                    _ => (),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !self.is_in_child && is_jsx_component {
+            let first_decl = &mut decls[0];
+            if let Pat::Ident(ident) = &mut first_decl.name {
+                // get the function name
+                self.component_name = ident.id.clone();
+            }
+        }
+
+        // check after update self.component_name
         n.visit_mut_children_with(self);
     }
 
