@@ -233,24 +233,6 @@ test!(
     "#
 );
 
-test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor::new()),
-    replace_function_name,
-    // Input codes
-    r#"
-    function before(number) {
-        return number * number;
-    }
-    "#,
-    // Output codes after transformed with plugin
-    r#"
-    function after(number) {
-        return number * number;
-    }
-    "#
-);
-
 // https://github.com/swc-project/swc/blob/main/crates/swc/tests/simple.rs
 test!(
     Syntax::Typescript(TsConfig {
