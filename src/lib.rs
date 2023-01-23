@@ -146,6 +146,7 @@ impl VisitMut for TransformVisitor {
 
         let element_name = &mut n.name;
         let attrs = &mut n.attrs;
+        let is_self_closing = n.self_closing;
 
         // add "data-testid" if there is no "data-testid" attribute.
         let upcoming_attr_name = "data-testid";
@@ -224,8 +225,10 @@ impl VisitMut for TransformVisitor {
         }
 
         // check top level of component
-        // TODO: support for sef-closing component
-        self.is_in_child = true;
+        // CHECK: support for sef-closing component
+        if !is_self_closing {
+            self.is_in_child = true;
+        }
         self.parent_name = element_name.clone();
     }
 
