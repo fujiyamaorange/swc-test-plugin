@@ -2,7 +2,7 @@ use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
-        ast::{FnDecl, Ident, JSXAttrValue, Lit, Pat, Program, Stmt},
+        ast::{FnDecl, Id, Ident, JSXAttrValue, Lit, Pat, Program, Stmt},
         atoms::JsWordStaticSet,
         transforms::testing::test,
         visit::{as_folder, FoldWith, VisitMut, VisitMutWith},
@@ -11,7 +11,7 @@ use swc_core::{
 
 pub struct TransformVisitor {
     is_in_child: bool,
-    parent_name: JSXElementName,
+    parent_id: Id,
     component_name: Ident,
 }
 use convert_case::{Case, Casing};
@@ -28,7 +28,26 @@ fn convert_to_kebab_case(s: Atom<JsWordStaticSet>) -> String {
     return s.clone().to_string().to_case(Case::Kebab);
 }
 
-fn parser_block_stmt(block_stmt: &mut BlockStmt) -> bool {
+fn parse_expr_stmt(expr_stmt: &mut Box<Expr>) -> bool {
+    let mut is_jsx_component = false;
+
+    match &mut **expr_stmt {
+        // TODO: support for JSX***
+        Expr::Paren(paren_expr) => {
+            let expr = &mut paren_expr.expr;
+            // TODO: support for JSX***
+            match &mut **expr {
+                Expr::JSXElement(_) => is_jsx_component = true,
+                _ => (),
+            }
+        }
+        _ => (),
+    }
+
+    return is_jsx_component;
+}
+
+fn parse_block_stmt(block_stmt: &mut BlockStmt) -> bool {
     let mut is_jsx_component = false;
 
     let stmts = &mut block_stmt.stmts;
@@ -71,11 +90,7 @@ impl TransformVisitor {
     fn new() -> Self {
         Self {
             is_in_child: false,
-            parent_name: JSXElementName::Ident(Ident {
-                span: DUMMY_SP,
-                sym: "".into(),
-                optional: false,
-            }),
+            parent_id: Id::default(),
             component_name: Ident {
                 span: DUMMY_SP,
                 sym: "".into(),
@@ -129,7 +144,11 @@ impl VisitMut for TransformVisitor {
                 if let Expr::Arrow(arrow_expr) = &mut **init {
                     if let BlockStmtOrExpr::BlockStmt(block_stmt) = &mut arrow_expr.body {
                         // Same as Functions Expression
-                        let tmp_is_jsx_component = parser_block_stmt(block_stmt);
+                        let tmp_is_jsx_component = parse_block_stmt(block_stmt);
+                        is_jsx_component = tmp_is_jsx_component;
+                    }
+                    if let BlockStmtOrExpr::Expr(expr_stmt) = &mut arrow_expr.body {
+                        let tmp_is_jsx_component = parse_expr_stmt(expr_stmt);
                         is_jsx_component = tmp_is_jsx_component;
                     }
                 }
@@ -138,7 +157,7 @@ impl VisitMut for TransformVisitor {
                 if let Expr::Fn(fn_expr) = &mut **init {
                     if let Some(block_stmt) = &mut fn_expr.function.body {
                         // Same as Arrow Functions
-                        let tmp_is_jsx_component = parser_block_stmt(block_stmt);
+                        let tmp_is_jsx_component = parse_block_stmt(block_stmt);
                         is_jsx_component = tmp_is_jsx_component;
                     }
                 }
@@ -249,7 +268,12 @@ impl VisitMut for TransformVisitor {
         if !is_self_closing {
             self.is_in_child = true;
         }
-        self.parent_name = element_name.clone();
+
+        if let JSXElementName::Ident(ident) = &element_name {
+            self.parent_id = ident.to_id();
+        } else {
+            panic!("parent_name is not type Ident");
+        }
     }
 
     // visit jsx closing_element
@@ -264,8 +288,10 @@ impl VisitMut for TransformVisitor {
         // }
 
         // find parent closing_element
-        if *element_name == self.parent_name {
-            self.is_in_child = false;
+        if let JSXElementName::Ident(ident) = &*element_name {
+            if ident.to_id() == self.parent_id {
+                self.is_in_child = false;
+            }
         }
     }
 
@@ -614,7 +640,8 @@ test!(
         </div>
     }
 
-    function NoReturn () { <div /> }
+    // This might be strange but OK in this case.
+    function NoReturn () { <div data-testid="no-return" /> }
     "#
 );
 
@@ -657,102 +684,105 @@ test!(
         </div>
     }
 
-    const NoReturn = function() { <div /> }
+    // This might be strange but OK in this case.
+    const NoReturn = function() { <div data-testid="no-return" /> }
 
     const NoJSXReturn = function() { return 0 }
     "#
 );
 
-// test!(
-//     Syntax::Typescript(TsConfig {
-//         tsx: true,
-//         ..Default::default()
-//     }),
-//     |_| as_folder(TransformVisitor::new()),
-//     exit_test3_arrow_fn_expr,
-//     // Input codes
-//     r#"
-//     const Div = () => {
-//       return <div />
-//     }
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor::new()),
+    exit_test3_arrow_fn_expr,
+    // Input codes
+    r#"
+    const Div = () => {
+      return <div />
+    }
 
-//     const Nested = () => {
-//       return (
-//         <div>
-//           hello
-//           <div>world</div>
-//         </div>
-//       )
-//     }
+    const Nested = () => {
+      return (
+        <div>
+          hello
+          <div>world</div>
+        </div>
+      )
+    }
 
-//     const WithoutReturn = () => (
-//       <div>hello</div>
-//     )
+    const WithoutReturn = () => (
+      <div>hello</div>
+    )
 
-//     const WithoutReturnJSXFragment = () => (
-//       <>
-//         <div />
-//       </>
-//     )
+    const WithoutReturnJSXFragment = () => (
+      <>
+        <div />
+      </>
+    )
 
-//     const NoReturn = () => { <div /> }
-//     "#,
-//     // Output codes after transformed with plugin
-//     r#"
-//    const Div = () => {
-//       return <div data-testid="div" />
-//     }
+    const NoReturn = () => { <div /> }
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    const Div = () => {
+      return <div data-testid="div" />
+    }
 
-//     const Nested = () => {
-//       return <div data-testid="nested">
-//           hello
-//           <div>world</div>
-//         </div>
-//     }
+    const Nested = () => {
+      return <div data-testid="nested">
+          hello
+          <div>world</div>
+        </div>
+    }
 
-//     const WithoutReturn = () => <div data-testid="without-return">hello</div>;
+    const WithoutReturn = () => <div data-testid="without-return">hello</div>;
 
-//     const WithoutReturnJSXFragment = () => <>
-//         <div />
-//       </>;
+    // This might be strange but OK in this case.
+    const WithoutReturnJSXFragment = () => <>
+        <div data-testid="without-return" />
+      </>;
 
-//     const NoReturn = () => { <div /> }
-//     "#
-// );
+    // This might be strange but OK in this case.
+    const NoReturn = () => { <div data-testid="no-return" /> }
+    "#
+);
 
-// test!(
-//     Syntax::Typescript(TsConfig {
-//         tsx: true,
-//         ..Default::default()
-//     }),
-//     |_| as_folder(TransformVisitor::new()),
-//     exit_test4_with_children,
-//     // Input codes
-//     r#"
-//     const Parent = ({ children }) => (
-//       <div>{children}</div>
-//     )
+test!(
+    Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(TransformVisitor::new()),
+    exit_test4_with_children,
+    // Input codes
+    r#"
+    const Parent = ({ children }) => (
+      <div>{children}</div>
+    )
 
-//     const Child = () => (
-//       <Parent>
-//         <div>
-//           child
-//         </div>
-//       </Parent>
-//     )
-//     "#,
-//     // Output codes after transformed with plugin
-//     r#"
-//     const Parent = ({ children }) => <div data-testid="parent">{children}</div>;
+    const Child = () => (
+      <Parent>
+        <div>
+          child
+        </div>
+      </Parent>
+    )
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    const Parent = ({ children }) => <div data-testid="parent">{children}</div>;
 
-//     const Child = () =>
-//       <Parent data-testid="child">
-//         <div>
-//           child
-//         </div>
-//       </Parent>
-//     "#
-// );
+    const Child = () =>
+      <Parent data-testid="child">
+        <div>
+          child
+        </div>
+      </Parent>
+    "#
+);
 
 test!(
     Syntax::Typescript(TsConfig {
