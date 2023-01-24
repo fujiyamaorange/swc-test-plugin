@@ -17,8 +17,8 @@ pub struct TransformVisitor {
 use convert_case::{Case, Casing};
 use string_cache::Atom;
 use swc_core::ecma::ast::{
-    BlockStmt, BlockStmtOrExpr, Callee, Expr, JSXAttr, JSXAttrName, JSXAttrOrSpread,
-    JSXClosingElement, JSXElementName, JSXOpeningElement, Str, VarDecl,
+    BlockStmt, BlockStmtOrExpr, Expr, JSXAttr, JSXAttrName, JSXAttrOrSpread, JSXClosingElement,
+    JSXElementName, JSXOpeningElement, Str, VarDecl,
 };
 
 // Crates for Test
@@ -28,11 +28,18 @@ fn convert_to_kebab_case(s: Atom<JsWordStaticSet>) -> String {
     return s.clone().to_string().to_case(Case::Kebab);
 }
 
+/**
+* Check if the expression is Parenthesis Element
+* which returns JSXElement like the following example.
+*
+* (  <div>  <Component />  </div>  )
+*/
 fn parse_expr_stmt(expr_stmt: &mut Box<Expr>) -> bool {
     let mut is_jsx_component = false;
 
     match &mut **expr_stmt {
         // TODO: support for JSX***
+        // https://docs.rs/swc_ecma_ast/0.80.0/swc_ecma_ast/enum.Expr.html
         Expr::Paren(paren_expr) => {
             let expr = &mut paren_expr.expr;
             // TODO: support for JSX***
@@ -47,6 +54,7 @@ fn parse_expr_stmt(expr_stmt: &mut Box<Expr>) -> bool {
     return is_jsx_component;
 }
 
+// TODO: Write document
 fn parse_block_stmt(block_stmt: &mut BlockStmt) -> bool {
     let mut is_jsx_component = false;
 
@@ -101,31 +109,8 @@ impl TransformVisitor {
 }
 
 impl VisitMut for TransformVisitor {
-    // update a name of function callee
-    fn visit_mut_callee(&mut self, callee: &mut Callee) {
-        callee.visit_mut_children_with(self);
-
-        if let Callee::Expr(expr) = callee {
-            // https://swc.rs/docs/plugin/ecmascript/cheatsheet#matching-boxt
-            if let Expr::Ident(i) = &mut **expr {
-                if &*i.sym == "onePiece" {
-                    let replace_name: &str = "twoPiece";
-                    i.sym = replace_name.into();
-                }
-            }
-        }
-    }
-
-    // update a name of function declaration
     fn visit_mut_fn_decl(&mut self, n: &mut FnDecl) {
-        // struct
-        let Ident { sym, .. } = &mut n.ident;
-        {
-            if &*sym == "before" {
-                let replace_name: &str = "after";
-                *sym = replace_name.into();
-            }
-        }
+        // panic!("=====visit_mut_fn_decl=====");
         if !self.is_in_child {
             self.component_name = n.ident.clone();
         }
@@ -135,6 +120,7 @@ impl VisitMut for TransformVisitor {
 
     // This function is to get component_name and check variable whether jsx component or not
     fn visit_mut_var_decl(&mut self, n: &mut VarDecl) {
+        // panic!("=====visit_mut_var_decl=====");
         let decls = &mut n.decls;
         let mut is_jsx_component = false;
 
@@ -188,12 +174,12 @@ impl VisitMut for TransformVisitor {
         let is_self_closing = n.self_closing;
 
         // add "data-testid" if there is no "data-testid" attribute.
-        let upcoming_attr_name = "data-testid";
+        let attr_name = "data-testid";
         let mut has_attr = false;
         for attr_or_spread in attrs.iter_mut() {
             if let JSXAttrOrSpread::JSXAttr(attr) = attr_or_spread {
                 if let JSXAttrName::Ident(name) = &mut attr.name {
-                    if &*name.sym == upcoming_attr_name {
+                    if &*name.sym == attr_name {
                         has_attr = true;
                     }
                 }
@@ -205,7 +191,7 @@ impl VisitMut for TransformVisitor {
                 span: DUMMY_SP,
                 name: JSXAttrName::Ident(Ident {
                     span: DUMMY_SP,
-                    sym: upcoming_attr_name.into(),
+                    sym: attr_name.into(),
                     optional: false,
                 }),
                 value: Some(JSXAttrValue::Lit(Lit::Str(Str {
@@ -218,7 +204,6 @@ impl VisitMut for TransformVisitor {
                         )
                         .into(),
                     ),
-                    // convert_to_kebab_case
                 }))),
             }));
         }
@@ -229,23 +214,6 @@ impl VisitMut for TransformVisitor {
                 if let JSXAttrName::Ident(name) = &mut attr.name {
                     if let Some(JSXAttrValue::Lit(value)) = &mut attr.value {
                         if let Lit::Str(s) = value {
-                            if &*name.sym == "src" {
-                                if &*s.value == "before.png" {
-                                    s.span = DUMMY_SP;
-                                    s.value = Atom::from("after.png");
-                                    s.raw = Some("\"after.png\"".into());
-                                }
-                            }
-
-                            if &*name.sym == "normal" {
-                                let replace_name: &str = "special";
-                                name.sym = replace_name.into();
-
-                                s.span = DUMMY_SP;
-                                s.value = Atom::from("special_value");
-                                s.raw = Some("\"special_value\"".into());
-                            }
-
                             if &*name.sym == "lazy-load" {
                                 if &*s.value == "false" {
                                     s.span = DUMMY_SP;
@@ -255,10 +223,6 @@ impl VisitMut for TransformVisitor {
                             }
                         }
                     }
-                    // ===JSXAttr===
-                    // JSXExprContainer
-                    // JSXElement
-                    // JSXFragment
                 }
             }
         }
@@ -279,14 +243,6 @@ impl VisitMut for TransformVisitor {
     // visit jsx closing_element
     fn visit_mut_jsx_closing_element(&mut self, n: &mut JSXClosingElement) {
         let element_name = &mut n.name;
-
-        // if let JSXElementName::Ident(ident) = element_name {
-        //     if &*ident.sym == "h1" {
-        //         // convert to h2 element
-        //         ident.sym = "h2".into();
-        //     }
-        // }
-
         // find parent closing_element
         if let JSXElementName::Ident(ident) = &*element_name {
             if ident.to_id() == self.parent_id {
@@ -327,71 +283,7 @@ pub fn process_transform(program: Program, _metadata: TransformPluginProgramMeta
     program.fold_with(&mut as_folder(TransformVisitor::new()))
 }
 
-test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor::new()),
-    replace_fetch,
-    // Input codes
-    r#"
-    const res = await onePiece('http://localhost:9999');
-    "#,
-    // Output codes after transformed with plugin
-    r#"
-    const res = await twoPiece('http://localhost:9999');
-    "#
-);
-
 // https://github.com/swc-project/swc/blob/main/crates/swc/tests/simple.rs
-test!(
-    Syntax::Typescript(TsConfig {
-        tsx: true,
-        ..Default::default()
-    }),
-    |_| as_folder(TransformVisitor::new()),
-    replace_jsx_attr_name_and_value,
-    // Input codes
-    r#"
-    function TextComponent() {
-        return
-            <div normal="value">
-                <h1>hello</h1>
-            </div>
-    }
-    "#,
-    // Output codes after transformed with plugin
-    r#"
-    function TextComponent() {
-        return
-            <div special="special_value" data-testid="text-component">
-                <h1>hello</h1>
-            </div>
-    }
-    "#
-);
-
-test!(
-    Syntax::Typescript(TsConfig {
-        tsx: true,
-        ..Default::default()
-    }),
-    |_| as_folder(TransformVisitor::new()),
-    replace_jsx_attr_value,
-    // Input codes
-    r#"
-    function Component() {
-        return
-            <img src="before.png" />
-    }
-    "#,
-    // Output codes after transformed with plugin
-    r#"
-    function Component() {
-        return
-            <img src="after.png" data-testid="component" />
-    }
-    "#
-);
-
 test!(
     Syntax::Typescript(TsConfig {
         tsx: true,
@@ -421,39 +313,12 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor::new()),
-    replace_jsx_element_name,
+    data_testid_already_has_attr,
     // Input codes
     r#"
     function Text() {
         return
-            <h1>
-                This is Text Element!
-            </h1>
-    }
-    "#,
-    // Output codes after transformed with plugin
-    r#"
-    function Text() {
-        return
-            <h1 data-testid="text">
-                This is Text Element!
-            </h1>
-    }
-    "#
-);
-
-test!(
-    Syntax::Typescript(TsConfig {
-        tsx: true,
-        ..Default::default()
-    }),
-    |_| as_folder(TransformVisitor::new()),
-    not_insert_jsx_attr,
-    // Input codes
-    r#"
-    function Text() {
-        return
-            <h3 data-testid="already-data-testid">
+            <h3 data-testid="current-data-testid">
                 This is Text Element!
             </h3>
     }
@@ -462,7 +327,7 @@ test!(
     r#"
     function Text() {
         return
-            <h3 data-testid="already-data-testid">
+            <h3 data-testid="current-data-testid">
                 This is Text Element!
             </h3>
     }
@@ -475,7 +340,7 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor::new()),
-    add_jsx_attr_only_parent,
+    data_testid_has_children,
     // Input codes
     r#"
     function Component() {
@@ -506,7 +371,7 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor::new()),
-    replace_jsx_attr_like_practice_with_parenthesis,
+    data_testid_like_practice_with_parenthesis,
     // Input codes
     r#"
     import { UserProfile } from './user';
@@ -564,7 +429,7 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor::new()),
-    replace_jsx_attr_like_practice_without_parenthesis,
+    data_testid_like_practice_without_parenthesis,
     // Input codes
     r#"
     import { UserProfile } from './user';
@@ -609,7 +474,7 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor::new()),
-    exit_test1_fn_decl,
+    data_testid_function_declaration,
     // Input codes
     r#"
     function Div() {
@@ -651,7 +516,7 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor::new()),
-    exit_test2_fn_expr,
+    data_testid_function_expression,
     // Input codes
     r#"
     const Div = function() {
@@ -697,7 +562,7 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor::new()),
-    exit_test3_arrow_fn_expr,
+    data_testid_arrow_function_expression,
     // Input codes
     r#"
     const Div = () => {
@@ -756,7 +621,7 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(TransformVisitor::new()),
-    exit_test4_with_children,
+    data_testid_arrow_function_expression_with_children,
     // Input codes
     r#"
     const Parent = ({ children }) => (
@@ -781,26 +646,5 @@ test!(
           child
         </div>
       </Parent>
-    "#
-);
-
-test!(
-    Syntax::Typescript(TsConfig {
-        tsx: true,
-        ..Default::default()
-    }),
-    |_| as_folder(TransformVisitor::new()),
-    exit_test5_already_has_attr,
-    // Input codes
-    r#"
-    function Div() {
-      return <div data-testid='already-defined' />
-    }
-    "#,
-    // Output codes after transformed with plugin
-    r#"
-    function Div() {
-      return <div data-testid='already-defined' />
-    }
     "#
 );
