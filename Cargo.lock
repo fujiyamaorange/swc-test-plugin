@@ -1273,6 +1273,7 @@ version = "0.1.0"
 dependencies = [
  "convert_case",
  "serde",
+ "serde_json",
  "string_cache",
  "swc_core",
  "swc_ecma_ast 0.96.1",

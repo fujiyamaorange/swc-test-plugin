@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
 use swc_core::{
     common::DUMMY_SP,
@@ -10,10 +11,18 @@ use swc_core::{
 };
 
 pub struct TransformVisitor {
+    attr_name: String,
     is_in_child: bool,
     parent_id: Id,
     component_name: Ident,
 }
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    #[serde(default)]
+    pub attr_name: String,
+}
+
 use convert_case::{Case, Casing};
 use string_cache::Atom;
 use swc_core::ecma::ast::{
@@ -117,6 +126,7 @@ fn parse_block_stmt(block_stmt: &mut BlockStmt) -> bool {
 impl TransformVisitor {
     fn new() -> Self {
         Self {
+            attr_name: "".to_string(),
             is_in_child: false,
             parent_id: Id::default(),
             component_name: Ident {
@@ -125,6 +135,10 @@ impl TransformVisitor {
                 optional: false,
             },
         }
+    }
+
+    fn set_config(&mut self, attr_name: String) {
+        self.attr_name = attr_name;
     }
 }
 
@@ -193,8 +207,8 @@ impl VisitMut for TransformVisitor {
         let attrs = &mut n.attrs;
         let is_self_closing = n.self_closing;
 
-        // add "data-testid" if there is no "data-testid" attribute.
-        let attr_name = "data-testid";
+        // add "data-testid"(by default) if there is no "data-testid"(by default) attribute.
+        let attr_name = self.attr_name.clone();
         let mut has_attr = false;
         for attr_or_spread in attrs.iter_mut() {
             if let JSXAttrOrSpread::JSXAttr(attr) = attr_or_spread {
@@ -299,8 +313,16 @@ impl VisitMut for TransformVisitor {
 /// This requires manual handling of serialization / deserialization from ptrs.
 /// Refer swc_plugin_macro to see how does it work internally.
 #[plugin_transform]
-pub fn process_transform(program: Program, _metadata: TransformPluginProgramMetadata) -> Program {
-    program.fold_with(&mut as_folder(TransformVisitor::new()))
+pub fn process_transform(program: Program, metadata: TransformPluginProgramMetadata) -> Program {
+    let mut visitor = TransformVisitor::new();
+    let config = serde_json::from_str::<Config>(
+        &metadata
+            .get_transform_plugin_config()
+            .expect("failed to get plugin config for this swc plugin"),
+    )
+    .expect("invalid config for this swc plugin");
+    visitor.set_config(config.attr_name);
+    program.fold_with(&mut as_folder(visitor))
 }
 
 // https://github.com/swc-project/swc/blob/main/crates/swc/tests/simple.rs
