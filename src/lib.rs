@@ -32,7 +32,11 @@ fn convert_to_kebab_case(s: Atom<JsWordStaticSet>) -> String {
 * Check if the expression is Parenthesis Element
 * which returns JSXElement like the following example.
 *
-* (  <div>  <Component />  </div>  )
+* (
+    <div>
+        <Component />
+    </div>
+  )
 */
 fn parse_expr_stmt(expr_stmt: &mut Box<Expr>) -> bool {
     let mut is_jsx_component = false;
@@ -54,7 +58,23 @@ fn parse_expr_stmt(expr_stmt: &mut Box<Expr>) -> bool {
     return is_jsx_component;
 }
 
-// TODO: Write document
+/**
+ * Check if the block statement is like following examples.
+ *
+ * <<Pattern 1 (Self Closing)>>
+ * return <Component />
+ *
+ * <<Pattern 2 (Return JSXElement with Parenthesis)>>
+ * return (
+ *   <div>
+ *     <h1>Text</h1>
+ *   </div>
+ * )
+ *
+ * <<Pattern 3 (Return JSXElement without Parenthesis)>>
+ * return <div><h1>Text</h1></div>
+ *
+ */
 fn parse_block_stmt(block_stmt: &mut BlockStmt) -> bool {
     let mut is_jsx_component = false;
 
@@ -65,9 +85,9 @@ fn parse_block_stmt(block_stmt: &mut BlockStmt) -> bool {
             if let Some(arg) = &mut return_stmt.arg {
                 match &mut **arg {
                     // TODO: support for JSX***
-                    // return one JSXElement(self closing) without parenthesis (pattern1)
+                    // <<Pattern 1 (Self Closing)>>
                     Expr::JSXElement(_) => is_jsx_component = true,
-                    // return JSXElement with parenthesis (pattern2)
+                    // <<Pattern 2 (Return JSXElement with Parenthesis)>>
                     Expr::Paren(paren_expr) => {
                         let expr = &mut paren_expr.expr;
                         // TODO: support for JSX***
@@ -81,7 +101,7 @@ fn parse_block_stmt(block_stmt: &mut BlockStmt) -> bool {
             }
         }
 
-        // return JSXElements without parenthesis (pattern3)
+        // <<Pattern 3 (Return JSXElement without Parenthesis)>>
         if let Stmt::Expr(expr_stmt) = stmt {
             let expr = &mut expr_stmt.expr;
             match &mut **expr {
