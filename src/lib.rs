@@ -172,7 +172,7 @@ impl VisitMut for TransformVisitor {
 
         if !self.is_in_child && is_jsx_component {
             let first_decl = &mut decls[0];
-            if let Pat::Ident(ident) = &mut first_decl.name {
+            if let Pat::Ident(ident) = &first_decl.name {
                 // get the function name
                 self.component_name = ident.id.clone();
             }
@@ -184,12 +184,12 @@ impl VisitMut for TransformVisitor {
 
     // visit jsx opening_element
     fn visit_mut_jsx_opening_element(&mut self, n: &mut JSXOpeningElement) {
-        // TODO: support for sef-closing component
+        // CHECK: support for sef-closing component
         if self.is_in_child {
             return;
         }
 
-        let element_name = &mut n.name;
+        let element_name = &n.name;
         let attrs = &mut n.attrs;
         let is_self_closing = n.self_closing;
 
