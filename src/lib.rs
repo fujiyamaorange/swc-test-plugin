@@ -30,9 +30,6 @@ use swc_core::ecma::ast::{
     JSXElementName, JSXOpeningElement, Str, VarDecl,
 };
 
-// Crates for Test
-use swc_ecma_parser::{Syntax, TsConfig};
-
 fn convert_to_kebab_case(s: Atom<JsWordStaticSet>) -> String {
     return s.clone().to_string().to_case(Case::Kebab);
 }
@@ -325,13 +322,19 @@ pub fn process_transform(program: Program, metadata: TransformPluginProgramMetad
     program.fold_with(&mut as_folder(visitor))
 }
 
+fn make_test_visitor() -> TransformVisitor {
+    let mut visitor = TransformVisitor::new();
+    visitor.set_config("data-testid".to_string());
+    return visitor;
+}
+
 // https://github.com/swc-project/swc/blob/main/crates/swc/tests/simple.rs
 test!(
-    Syntax::Typescript(TsConfig {
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor::new()),
+    |_| as_folder(make_test_visitor()),
     replace_jsx_attr_bool,
     // Input codes
     r#"
@@ -350,11 +353,11 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor::new()),
+    |_| as_folder(make_test_visitor()),
     data_testid_already_has_attr,
     // Input codes
     r#"
@@ -377,11 +380,11 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor::new()),
+    |_| as_folder(make_test_visitor()),
     data_testid_has_children,
     // Input codes
     r#"
@@ -408,11 +411,11 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor::new()),
+    |_| as_folder(make_test_visitor()),
     data_testid_like_practice_with_parenthesis,
     // Input codes
     r#"
@@ -420,7 +423,7 @@ test!(
     import { User } from './types/user';
 
     const onClickFn = () => {
-        console.log('Button is clicked!!');
+        console.log('Hello, World!');
         return "hello";
     }
 
@@ -437,7 +440,7 @@ test!(
                 </div>
             </User>
         )
-            
+
     }
     "#,
     // Output codes after transformed with plugin
@@ -446,7 +449,7 @@ test!(
     import { User } from './types/user';
 
     const onClickFn = () => {
-        console.log('Button is clicked!!');
+        console.log('Hello, World!');
         return "hello";
     }
 
@@ -466,11 +469,11 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor::new()),
+    |_| as_folder(make_test_visitor()),
     data_testid_like_practice_without_parenthesis,
     // Input codes
     r#"
@@ -478,7 +481,7 @@ test!(
     import { User } from './types/user';
 
     const onClickFn = () => {
-        console.log('Button is clicked!!');
+        console.log('Hello, World!');
         return "hello";
     }
 
@@ -496,7 +499,7 @@ test!(
     import { User } from './types/user';
 
     const onClickFn = () => {
-        console.log('Button is clicked!!');
+        console.log('Hello, World!');
         return "hello";
     }
 
@@ -511,11 +514,11 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor::new()),
+    |_| as_folder(make_test_visitor()),
     data_testid_function_declaration,
     // Input codes
     r#"
@@ -539,7 +542,7 @@ test!(
     function Div() {
       return <div data-testid="div" />
     }
-    
+
     function Nested() {
       return <div data-testid="nested">
           hello
@@ -553,11 +556,11 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor::new()),
+    |_| as_folder(make_test_visitor()),
     data_testid_function_expression,
     // Input codes
     r#"
@@ -599,11 +602,11 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor::new()),
+    |_| as_folder(make_test_visitor()),
     data_testid_arrow_function_expression,
     // Input codes
     r#"
@@ -658,11 +661,11 @@ test!(
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
         tsx: true,
         ..Default::default()
     }),
-    |_| as_folder(TransformVisitor::new()),
+    |_| as_folder(make_test_visitor()),
     data_testid_arrow_function_expression_with_children,
     // Input codes
     r#"
@@ -688,5 +691,45 @@ test!(
           child
         </div>
       </Parent>
+    "#
+);
+
+test!(
+    swc_core::ecma::parser::Syntax::Typescript(swc_core::ecma::parser::TsConfig {
+        tsx: true,
+        ..Default::default()
+    }),
+    |_| as_folder(make_test_visitor()),
+    exact_sample_code,
+    // Input codes
+    r#"
+    import clsx from 'clsx'
+import { ComponentPropsWithoutRef, FC } from 'react'
+
+type Props = ComponentPropsWithoutRef<'div'>
+
+export const Border: FC<Props> = ({ className, ...rest }) => {
+  return (
+    <div
+      className={clsx('border-t-[1px] border-gray-200', className)}
+      {...rest}
+    />
+  )
+}
+    "#,
+    // Output codes after transformed with plugin
+    r#"
+    import clsx from 'clsx'
+import { ComponentPropsWithoutRef, FC } from 'react'
+
+type Props = ComponentPropsWithoutRef<'div'>
+
+export const Border: FC<Props> = ({ className, ...rest }) => {
+  return <div
+      className={clsx('border-t-[1px] border-gray-200', className)}
+      {...rest}
+      data-testid="border"
+    />
+}
     "#
 );
