@@ -1,5 +1,4 @@
 use serde::Deserialize;
-use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
@@ -8,6 +7,7 @@ use swc_core::{
         transforms::testing::test,
         visit::{as_folder, FoldWith, VisitMut, VisitMutWith},
     },
+    plugin::{plugin_transform, proxies::TransformPluginProgramMetadata},
 };
 
 pub struct TransformVisitor {
