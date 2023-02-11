@@ -216,7 +216,7 @@ impl VisitMut for TransformVisitor {
                 }
             }
         }
-        if !has_attr {
+        if !has_attr && &*self.component_name.sym != "" {
             // add attribute
             attrs.push(JSXAttrOrSpread::JSXAttr(JSXAttr {
                 span: DUMMY_SP,
