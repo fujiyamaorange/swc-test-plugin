@@ -700,36 +700,106 @@ test!(
         ..Default::default()
     }),
     |_| as_folder(make_test_visitor()),
-    exact_sample_code,
+    exact_code_no_change,
     // Input codes
     r#"
-    import clsx from 'clsx'
-import { ComponentPropsWithoutRef, FC } from 'react'
+export const SettingProfilePage: FC = () => {
 
-type Props = ComponentPropsWithoutRef<'div'>
+  if (!user) return <LoadingPage />
 
-export const Border: FC<Props> = ({ className, ...rest }) => {
   return (
-    <div
-      className={clsx('border-t-[1px] border-gray-200', className)}
-      {...rest}
-    />
+    <>
+      <UserNavbar />
+      <div className="max-w-md mx-4 sm:mx-auto">
+        <h1 className="mt-8 text-2xl font-bold text-gray-800">Setting</h1>
+        <SettingsTab />
+        <div className="my-8">
+          <h3 className="inline-flex items-center text-lg font-semibold text-gray-700">
+            Setting Profile
+          </h3>
+          <p className="mt-1 mb-4 text-sm text-gray-500">
+            Use your data
+          </p>
+          <TextField
+            name="parent"
+            label="parent name"
+            required
+            control={control}
+          />
+          <TextField
+            name="email"
+            label="email"
+            required
+            control={control}
+          />
+          <Border className="my-8" />
+
+          <div>
+            <button
+              className={clsx(
+                'relative flex justify-center w-full px-4 py-2 text-sm font-medium text-white transition duration-150 bg-blue-600 border border-transparent rounded-md group hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500',
+                { 'cursor-not-allowed': isLoading }
+              )}
+              disabled={isLoading}
+              onClick={handleSubmit(onSubmit)}
+            >
+              Button
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
     "#,
     // Output codes after transformed with plugin
     r#"
-    import clsx from 'clsx'
-import { ComponentPropsWithoutRef, FC } from 'react'
+export const SettingProfilePage: FC = () => {
 
-type Props = ComponentPropsWithoutRef<'div'>
+  if (!user) return <LoadingPage />
 
-export const Border: FC<Props> = ({ className, ...rest }) => {
-  return <div
-      className={clsx('border-t-[1px] border-gray-200', className)}
-      {...rest}
-      data-testid="border"
-    />
+  return <>
+      <UserNavbar />
+      <div className="max-w-md mx-4 sm:mx-auto">
+        <h1 className="mt-8 text-2xl font-bold text-gray-800">Setting</h1>
+        <SettingsTab />
+        <div className="my-8">
+          <h3 className="inline-flex items-center text-lg font-semibold text-gray-700">
+            Setting Profile
+          </h3>
+          <p className="mt-1 mb-4 text-sm text-gray-500">
+            Use your data
+          </p>
+          <TextField
+            name="parent"
+            label="parent name"
+            required
+            control={control}
+          />
+          <TextField
+            name="email"
+            label="email"
+            required
+            control={control}
+          />
+          <Border className="my-8" />
+
+          <div>
+            <button
+              className={clsx(
+                'relative flex justify-center w-full px-4 py-2 text-sm font-medium text-white transition duration-150 bg-blue-600 border border-transparent rounded-md group hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500',
+                { 'cursor-not-allowed': isLoading }
+              )}
+              disabled={isLoading}
+              onClick={handleSubmit(onSubmit)}
+            >
+              Button
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
 }
+
     "#
 );
