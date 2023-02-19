@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use serde_json::Value;
 use swc_core::{
     common::{FileName, DUMMY_SP},
     ecma::{
@@ -15,6 +16,7 @@ use swc_core::{
 
 pub struct TransformVisitor {
     attr_name: String,
+    ignore_files: Vec<String>,
     is_in_child: bool,
     is_ignore: bool,
     parent_id: Id,
@@ -26,6 +28,7 @@ pub struct Config {
     #[serde(default)]
     pub attr_name: String,
     pub ignore_files: Vec<String>,
+    // TODO: add ignore_components property
 }
 
 use convert_case::{Case, Casing};
@@ -129,6 +132,7 @@ impl TransformVisitor {
     fn new() -> Self {
         Self {
             attr_name: "".to_string(),
+            ignore_files: [].to_vec(),
             is_in_child: false,
             is_ignore: false,
             parent_id: Id::default(),
@@ -140,9 +144,10 @@ impl TransformVisitor {
         }
     }
 
-    fn set_config(&mut self, attr_name: String, is_ignore: bool) {
-        self.attr_name = attr_name;
-        self.is_ignore = is_ignore;
+    fn set_config(&mut self, config: &Config, filename: FileName) {
+        self.attr_name = config.attr_name.clone();
+        self.ignore_files = config.ignore_files.clone();
+        // TODO: set filename to self.
     }
 }
 
@@ -260,24 +265,24 @@ impl VisitMut for TransformVisitor {
             }));
         }
 
-        // for attr_or_spread in attrs.iter_mut() {
-        //     if let JSXAttrOrSpread::JSXAttr(attr) = attr_or_spread {
-        //         // almost same as visit_mut_jsx_attr(update name or value of jsx attribute) function
-        //         if let JSXAttrName::Ident(name) = &mut attr.name {
-        //             if let Some(JSXAttrValue::Lit(value)) = &mut attr.value {
-        //                 if let Lit::Str(s) = value {
-        //                     if &*name.sym == "lazy-load" {
-        //                         if &*s.value == "false" {
-        //                             s.span = DUMMY_SP;
-        //                             s.value = Atom::from("true");
-        //                             s.raw = Some("\"true\"".into());
-        //                         }
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
+        for attr_or_spread in attrs.iter_mut() {
+            if let JSXAttrOrSpread::JSXAttr(attr) = attr_or_spread {
+                // almost same as visit_mut_jsx_attr(update name or value of jsx attribute) function
+                if let JSXAttrName::Ident(name) = &mut attr.name {
+                    if let Some(JSXAttrValue::Lit(value)) = &mut attr.value {
+                        if let Lit::Str(s) = value {
+                            if &*name.sym == "lazy-load" {
+                                if &*s.value == "false" {
+                                    s.span = DUMMY_SP;
+                                    s.value = Atom::from("true");
+                                    s.raw = Some("\"true\"".into());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // check top level of component
         // CHECK: support for sef-closing component
@@ -336,34 +341,54 @@ impl VisitMut for TransformVisitor {
 /// Refer swc_plugin_macro to see how does it work internally.
 #[plugin_transform]
 pub fn process_transform(program: Program, metadata: TransformPluginProgramMetadata) -> Program {
-    let mut visitor = TransformVisitor::new();
-    let config = serde_json::from_str::<Config>(
+    let filename = match metadata.get_context(&TransformPluginMetadataContextKind::Filename) {
+        Some(s) => FileName::Real(s.into()),
+        None => FileName::Anon,
+    };
+    let plugin_config: Value = serde_json::from_str(
         &metadata
             .get_transform_plugin_config()
             .expect("failed to get plugin config for this swc plugin"),
     )
-    .expect("invalid config for this swc plugin");
+    .expect("Should provide config for this swc plugin");
+    let attr_name = plugin_config["attrName"]
+        .as_str()
+        .expect("attr_name is expected")
+        .to_string();
 
-    let file_name = match metadata.get_context(&TransformPluginMetadataContextKind::Filename) {
-        Some(s) => FileName::Real(s.into()),
-        None => FileName::Anon,
+    let ignore_files = plugin_config["ignoreFiles"]
+        .as_array()
+        .expect("ignoreFiles is expected")
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>();
+
+    let config = Config {
+        attr_name,
+        ignore_files,
     };
-    let mut is_ignore = false;
-    // ignoreFiles
-    let mut ignore_files = config.ignore_files;
-    for ignore_file in ignore_files.iter_mut() {
-        if file_name.to_string().contains(&*ignore_file) {
-            is_ignore = true;
-        }
-    }
 
-    visitor.set_config(config.attr_name, is_ignore);
+    // let mut is_ignore = false;
+    // // ignoreFiles
+    // let mut ignore_files = plugin_config.ignore_files;
+    // for ignore_file in ignore_files.iter_mut() {
+    //     if filename.to_string().contains(&*ignore_file) {
+    //         is_ignore = true;
+    //     }
+    // }
+
+    let mut visitor = TransformVisitor::new();
+    visitor.set_config(&config, filename);
     program.fold_with(&mut as_folder(visitor))
 }
 
 fn make_test_visitor() -> TransformVisitor {
     let mut visitor = TransformVisitor::new();
-    visitor.set_config("data-testid".to_string(), false);
+    let config = Config {
+        attr_name: "data-testid".to_string(),
+        ignore_files: [].to_vec(),
+    };
+    visitor.set_config(&config, FileName::Anon);
     return visitor;
 }
 
