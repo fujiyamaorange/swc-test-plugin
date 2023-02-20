@@ -16,7 +16,6 @@ use swc_core::{
 
 pub struct TransformVisitor {
     attr_name: String,
-    ignore_files: Vec<String>,
     ignore_components: Vec<String>,
     filename: FileName,
     is_in_child: bool,
@@ -28,7 +27,6 @@ pub struct TransformVisitor {
 pub struct Config {
     #[serde(default)]
     pub attr_name: String,
-    pub ignore_files: Vec<String>,
     pub ignore_components: Vec<String>,
 }
 
@@ -133,7 +131,6 @@ impl TransformVisitor {
     fn new() -> Self {
         Self {
             attr_name: "".to_string(),
-            ignore_files: [].to_vec(),
             ignore_components: [].to_vec(),
             filename: FileName::Anon,
             is_in_child: false,
@@ -148,7 +145,6 @@ impl TransformVisitor {
 
     fn set_config(&mut self, config: &Config, filename: FileName) {
         self.attr_name = config.attr_name.clone();
-        self.ignore_files = config.ignore_files.clone();
         self.ignore_components = config.ignore_components.clone();
         self.filename = filename;
     }
@@ -339,21 +335,20 @@ pub fn process_transform(program: Program, metadata: TransformPluginProgramMetad
 
     let config = Config {
         attr_name,
-        ignore_files: ignore_files.clone(),
         ignore_components,
     };
 
-    let mut is_ignore_file = false;
+    let mut is_ignore = false;
     for ignore_file in ignore_files.clone().iter_mut() {
-        let ig = ignore_file.trim_matches('\"');
-        if filename.to_string().contains(ig) {
-            is_ignore_file = true;
+        let igf = ignore_file.trim_matches('\"');
+        if filename.to_string().contains(igf) {
+            is_ignore = true;
         }
     }
 
     let mut visitor = TransformVisitor::new();
     visitor.set_config(&config, filename);
-    if is_ignore_file {
+    if is_ignore {
         program
     } else {
         program.fold_with(&mut as_folder(visitor))
@@ -364,7 +359,6 @@ fn make_test_visitor() -> TransformVisitor {
     let mut visitor = TransformVisitor::new();
     let config = Config {
         attr_name: "data-testid".to_string(),
-        ignore_files: [].to_vec(),
         ignore_components: [].to_vec(),
     };
     visitor.set_config(&config, FileName::Anon);
