@@ -17,6 +17,7 @@ use swc_core::{
 pub struct TransformVisitor {
     attr_name: String,
     ignore_files: Vec<String>,
+    ignore_components: Vec<String>,
     is_in_child: bool,
     is_ignore: bool,
     parent_id: Id,
@@ -28,7 +29,7 @@ pub struct Config {
     #[serde(default)]
     pub attr_name: String,
     pub ignore_files: Vec<String>,
-    // TODO: add ignore_components property
+    pub ignore_components: Vec<String>,
 }
 
 use convert_case::{Case, Casing};
@@ -133,6 +134,7 @@ impl TransformVisitor {
         Self {
             attr_name: "".to_string(),
             ignore_files: [].to_vec(),
+            ignore_components: [].to_vec(),
             is_in_child: false,
             is_ignore: false,
             parent_id: Id::default(),
@@ -147,6 +149,7 @@ impl TransformVisitor {
     fn set_config(&mut self, config: &Config, filename: FileName) {
         self.attr_name = config.attr_name.clone();
         self.ignore_files = config.ignore_files.clone();
+        self.ignore_components = config.ignore_components.clone();
         // TODO: set filename to self.
     }
 }
@@ -363,9 +366,17 @@ pub fn process_transform(program: Program, metadata: TransformPluginProgramMetad
         .map(|v| v.to_string())
         .collect::<Vec<_>>();
 
+    let ignore_components = plugin_config["ignoreComponents"]
+        .as_array()
+        .expect("ignoreComponent is expected")
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>();
+
     let config = Config {
         attr_name,
         ignore_files,
+        ignore_components,
     };
 
     // let mut is_ignore = false;
@@ -387,6 +398,7 @@ fn make_test_visitor() -> TransformVisitor {
     let config = Config {
         attr_name: "data-testid".to_string(),
         ignore_files: [].to_vec(),
+        ignore_components: [].to_vec(),
     };
     visitor.set_config(&config, FileName::Anon);
     return visitor;
