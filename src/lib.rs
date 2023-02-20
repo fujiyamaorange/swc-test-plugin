@@ -45,6 +45,22 @@ fn convert_to_kebab_case(s: Atom<JsWordStaticSet>) -> String {
 }
 
 /**
+ * Whether vec contains item
+ * return true if one element of vec is same item(String Compare)
+ */
+fn vec_contains_string(vec: Vec<String>, item: String) -> bool {
+    let mut is_in_vec = false;
+    for content in vec.clone().iter_mut() {
+        let trimed_content = content.trim_matches('\"');
+        if trimed_content == item {
+            is_in_vec = true;
+        }
+    }
+
+    is_in_vec
+}
+
+/**
 * Check if the expression is Parenthesis Element
 * which returns JSXElement like the following example.
 *
@@ -229,7 +245,18 @@ impl VisitMut for TransformVisitor {
                 }
             }
         }
-        if !has_attr && &*self.component_name.sym != "" {
+
+        //  Check
+        //  1. this element has specific attribute
+        //  2. this element has component_name(is not child element)
+        //  3. this element is not one of ignore components
+        if !has_attr
+            && &*self.component_name.sym != ""
+            && !vec_contains_string(
+                self.ignore_components.clone(),
+                self.component_name.sym.to_string(),
+            )
+        {
             // add attribute
             attrs.push(JSXAttrOrSpread::JSXAttr(JSXAttr {
                 span: DUMMY_SP,
