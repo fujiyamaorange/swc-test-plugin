@@ -37,6 +37,9 @@ use swc_core::ecma::ast::{
     JSXElementName, JSXOpeningElement, Str, VarDecl,
 };
 
+/**
+ * Convert to kebab-case from UpperCamelCase(component name)
+ */
 fn convert_to_kebab_case(s: Atom<JsWordStaticSet>) -> String {
     return s.clone().to_string().to_case(Case::Kebab);
 }
