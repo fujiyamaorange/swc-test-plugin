@@ -18,6 +18,7 @@ pub struct TransformVisitor {
     attr_name: String,
     ignore_files: Vec<String>,
     ignore_components: Vec<String>,
+    filename: FileName,
     is_in_child: bool,
     is_ignore: bool,
     parent_id: Id,
@@ -135,6 +136,7 @@ impl TransformVisitor {
             attr_name: "".to_string(),
             ignore_files: [].to_vec(),
             ignore_components: [].to_vec(),
+            filename: FileName::Anon,
             is_in_child: false,
             is_ignore: false,
             parent_id: Id::default(),
@@ -150,11 +152,12 @@ impl TransformVisitor {
         self.attr_name = config.attr_name.clone();
         self.ignore_files = config.ignore_files.clone();
         self.ignore_components = config.ignore_components.clone();
-        // TODO: set filename to self.
+        self.filename = filename;
     }
 }
 
 impl VisitMut for TransformVisitor {
+    // TODO: CHECK ignoreComponents
     fn visit_mut_fn_decl(&mut self, n: &mut FnDecl) {
         // CHECK: whether if file will be ignored.
         if self.is_ignore {
@@ -375,22 +378,25 @@ pub fn process_transform(program: Program, metadata: TransformPluginProgramMetad
 
     let config = Config {
         attr_name,
-        ignore_files,
+        ignore_files: ignore_files.clone(),
         ignore_components,
     };
 
-    // let mut is_ignore = false;
-    // // ignoreFiles
-    // let mut ignore_files = plugin_config.ignore_files;
-    // for ignore_file in ignore_files.iter_mut() {
-    //     if filename.to_string().contains(&*ignore_file) {
-    //         is_ignore = true;
-    //     }
-    // }
+    let mut is_ignore_file = false;
+    for ignore_file in ignore_files.clone().iter_mut() {
+        if filename.to_string().contains(&*ignore_file) {
+            is_ignore_file = true;
+        }
+    }
 
     let mut visitor = TransformVisitor::new();
     visitor.set_config(&config, filename);
-    program.fold_with(&mut as_folder(visitor))
+
+    if is_ignore_file {
+        program.fold_with(&mut as_folder(visitor))
+    } else {
+        program
+    }
 }
 
 fn make_test_visitor() -> TransformVisitor {
