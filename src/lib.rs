@@ -20,7 +20,6 @@ pub struct TransformVisitor {
     ignore_components: Vec<String>,
     filename: FileName,
     is_in_child: bool,
-    is_ignore: bool,
     parent_id: Id,
     component_name: Ident,
 }
@@ -138,7 +137,6 @@ impl TransformVisitor {
             ignore_components: [].to_vec(),
             filename: FileName::Anon,
             is_in_child: false,
-            is_ignore: false,
             parent_id: Id::default(),
             component_name: Ident {
                 span: DUMMY_SP,
@@ -159,11 +157,6 @@ impl TransformVisitor {
 impl VisitMut for TransformVisitor {
     // TODO: CHECK ignoreComponents
     fn visit_mut_fn_decl(&mut self, n: &mut FnDecl) {
-        // CHECK: whether if file will be ignored.
-        if self.is_ignore {
-            return;
-        }
-        // panic!("=====visit_mut_fn_decl=====");
         if !self.is_in_child {
             self.component_name = n.ident.clone();
         }
@@ -173,11 +166,6 @@ impl VisitMut for TransformVisitor {
 
     // This function is to get component_name and check variable whether jsx component or not
     fn visit_mut_var_decl(&mut self, n: &mut VarDecl) {
-        // panic!("=====visit_mut_var_decl=====");
-        // CHECK: whether if file will be ignored.
-        if self.is_ignore {
-            return;
-        }
         let decls = &mut n.decls;
         let mut is_jsx_component = false;
 
@@ -221,10 +209,6 @@ impl VisitMut for TransformVisitor {
 
     // visit jsx opening_element
     fn visit_mut_jsx_opening_element(&mut self, n: &mut JSXOpeningElement) {
-        // CHECK: whether if file will be ignored.
-        if self.is_ignore {
-            return;
-        }
         // CHECK: support for sef-closing component
         if self.is_in_child {
             return;
@@ -305,10 +289,6 @@ impl VisitMut for TransformVisitor {
 
     // visit jsx closing_element
     fn visit_mut_jsx_closing_element(&mut self, n: &mut JSXClosingElement) {
-        // CHECK: whether if file will be ignored.
-        if self.is_ignore {
-            return;
-        }
         let element_name = &mut n.name;
         // find parent closing_element
         if let JSXElementName::Ident(ident) = &*element_name {
@@ -365,18 +345,18 @@ pub fn process_transform(program: Program, metadata: TransformPluginProgramMetad
 
     let mut is_ignore_file = false;
     for ignore_file in ignore_files.clone().iter_mut() {
-        if filename.to_string().contains(&*ignore_file) {
+        let ig = ignore_file.trim_matches('\"');
+        if filename.to_string().contains(ig) {
             is_ignore_file = true;
         }
     }
 
     let mut visitor = TransformVisitor::new();
     visitor.set_config(&config, filename);
-
     if is_ignore_file {
-        program.fold_with(&mut as_folder(visitor))
-    } else {
         program
+    } else {
+        program.fold_with(&mut as_folder(visitor))
     }
 }
 
